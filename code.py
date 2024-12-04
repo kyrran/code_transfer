@@ -18,7 +18,7 @@ names:
   9: ld       # Streetlamp (路灯)
   10: txx     # Communication Box (通讯箱)
 
-# No new folder creation; labels are saved in VOC/labels
+# Download script ---------------------------------------------------------------------------------------
 download: |
   import os
   import xml.etree.ElementTree as ET

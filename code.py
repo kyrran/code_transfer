@@ -1,5 +1,5 @@
 # Custom PASCAL VOC Dataset for YOLO
-path: ../datasets/VOC  # Root dataset path
+path: ./datasets/VOC  # Root dataset path
 train: ImageSets/Main/train.txt  # Relative path to training split
 val: ImageSets/Main/val.txt      # Relative path to validation split
 test: ImageSets/Main/test.txt    # Relative path to testing split (optional)
@@ -18,7 +18,7 @@ names:
   9: ld       # Streetlamp (路灯)
   10: txx     # Communication Box (通讯箱)
 
-# Optional download script for automatic setup ---------------------------------------------------------------------------------------
+# No new folder creation; labels are saved in VOC/labels
 download: |
   import os
   import xml.etree.ElementTree as ET
@@ -59,8 +59,7 @@ download: |
   # Paths
   dataset_root = Path(yaml['path'])
   annotations_dir = dataset_root / "Annotations"
-  images_dir = dataset_root / "JPEGImages"
-  labels_dir = dataset_root / "labels"
+  labels_dir = dataset_root / "labels"  # Save labels in VOC/labels
   labels_dir.mkdir(exist_ok=True, parents=True)
 
   # Class mapping

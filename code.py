@@ -1,73 +1,85 @@
-# Custom PASCAL VOC Dataset for YOLO
-path: ./datasets/VOC  # Root dataset path
-train: ImageSets/Main/train.txt  # Relative path to training split
-val: ImageSets/Main/val.txt      # Relative path to validation split
-test: ImageSets/Main/test.txt    # Relative path to testing split (optional)
+import os
+import xml.etree.ElementTree as ET
+import shutil
 
-# Classes
-names:
-  0: jg       # Manhole Cover (井盖)
-  1: rxd      # Crossing Light (人行灯)
-  2: dxgx     # Pipeline Indicating Pile (地下管线桩)
-  3: zsp      # Traffic Signs (指示牌)
-  4: xfs      # Hydrant (消防栓)
-  5: dzy      # Camera (电子眼)
-  6: lhd      # Traffic Light (红绿灯)
-  7: jdp      # Guidepost (街道路名牌)
-  8: jsp      # Traffic Warning Sign (警示牌)
-  9: ld       # Streetlamp (路灯)
-  10: txx     # Communication Box (通讯箱)
+# Configuration
+VOC_ROOT = "./VOC"  # Root directory of your VOC dataset
+OUTPUT_DIR = "./YOLO_Kaggle"  # Output directory for YOLO-formatted dataset
+CLASSES = {
+    "jg": 0,       # Manhole Cover (井盖)
+    "rxd": 1,      # Crossing Light (人行灯)
+    "dxgx": 2,     # Pipeline Indicating Pile (地下管线桩)
+    "zsp": 3,      # Traffic Signs (指示牌)
+    "xfs": 4,      # Hydrant (消防栓)
+    "dzy": 5,      # Camera (电子眼)
+    "lhd": 6,      # Traffic Light (红绿灯)
+    "jdp": 7,      # Guidepost (街道路名牌)
+    "jsp": 8,      # Traffic Warning Sign (警示牌)
+    "ld": 9,       # Streetlamp (路灯)
+    "txx": 10      # Communication Box (通讯箱)
+}
 
-# Download script ---------------------------------------------------------------------------------------
-download: |
-  import os
-  import xml.etree.ElementTree as ET
-  from tqdm import tqdm
-  from pathlib import Path
+def voc_to_yolo(size, box):
+    dw = 1.0 / size[0]
+    dh = 1.0 / size[1]
+    x_center = (box[0] + box[1]) / 2.0 - 1
+    y_center = (box[2] + box[3]) / 2.0 - 1
+    width = box[1] - box[0]
+    height = box[3] - box[2]
+    return x_center * dw, y_center * dh, width * dw, height * dh
 
-  def convert_voc_to_yolo(annotation_path, labels_path, class_mapping):
-      """Convert VOC XML annotations to YOLO format."""
-      tree = ET.parse(annotation_path)
-      root = tree.getroot()
+def convert_annotation(xml_path, output_txt_path):
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
 
-      # Image size
-      size = root.find("size")
-      w = int(size.find("width").text)
-      h = int(size.find("height").text)
+    size = root.find("size")
+    img_width = int(size.find("width").text)
+    img_height = int(size.find("height").text)
 
-      with open(labels_path, "w") as label_file:
-          for obj in root.findall("object"):
-              cls_name = obj.find("name").text
-              if cls_name not in class_mapping:
-                  continue
+    with open(output_txt_path, "w") as txt_file:
+        for obj in root.findall("object"):
+            class_name = obj.find("name").text
+            if class_name not in CLASSES:
+                print(f"Skipping unrecognized class: {class_name}")
+                continue
+            class_id = CLASSES[class_name]
+            bndbox = obj.find("bndbox")
+            box = (
+                float(bndbox.find("xmin").text),
+                float(bndbox.find("xmax").text),
+                float(bndbox.find("ymin").text),
+                float(bndbox.find("ymax").text)
+            )
+            yolo_box = voc_to_yolo((img_width, img_height), box)
+            txt_file.write(f"{class_id} {' '.join(f'{coord:.6f}' for coord in yolo_box)}\n")
 
-              cls_id = class_mapping[cls_name]
-              bbox = obj.find("bndbox")
-              xmin = float(bbox.find("xmin").text)
-              xmax = float(bbox.find("xmax").text)
-              ymin = float(bbox.find("ymin").text)
-              ymax = float(bbox.find("ymax").text)
+def main():
+    annotations_dir = os.path.join(VOC_ROOT, "Annotations")
+    images_dir = os.path.join(VOC_ROOT, "JPEGImages")
+    output_images_dir = os.path.join(OUTPUT_DIR, "images")
+    output_labels_dir = os.path.join(OUTPUT_DIR, "labels")
+    os.makedirs(output_images_dir, exist_ok=True)
+    os.makedirs(output_labels_dir, exist_ok=True)
 
-              # YOLO format: class_id x_center y_center width height (normalized)
-              x_center = ((xmin + xmax) / 2) / w
-              y_center = ((ymin + ymax) / 2) / h
-              box_width = (xmax - xmin) / w
-              box_height = (ymax - ymin) / h
+    for xml_file in os.listdir(annotations_dir):
+        if not xml_file.endswith(".xml"):
+            continue
+        xml_path = os.path.join(annotations_dir, xml_file)
+        image_id = os.path.splitext(xml_file)[0]
+        image_file = f"{image_id}.jpg"
+        image_path = os.path.join(images_dir, image_file)
+        output_image_path = os.path.join(output_images_dir, image_file)
+        output_label_path = os.path.join(output_labels_dir, f"{image_id}.txt")
 
-              label_file.write(f"{cls_id} {x_center:.6f} {y_center:.6f} {box_width:.6f} {box_height:.6f}\n")
+        # Convert annotation
+        convert_annotation(xml_path, output_label_path)
 
-  # Paths
-  dataset_root = Path(yaml['path'])
-  annotations_dir = dataset_root / "Annotations"
-  labels_dir = dataset_root / "labels"  # Save labels in VOC/labels
-  labels_dir.mkdir(exist_ok=True, parents=True)
+        # Copy image to YOLO folder
+        if os.path.exists(image_path):
+            shutil.copy(image_path, output_image_path)
 
-  # Class mapping
-  class_mapping = {name: idx for idx, name in yaml['names'].items()}
+    print(f"YOLO dataset created at {OUTPUT_DIR}")
+    print("Images and annotations are ready for Kaggle.")
 
-  # Convert annotations
-  for annotation_file in tqdm(os.listdir(annotations_dir), desc="Converting VOC to YOLO"):
-      if annotation_file.endswith(".xml"):
-          annotation_path = annotations_dir / annotation_file
-          label_path = labels_dir / f"{os.path.splitext(annotation_file)[0]}.txt"
-          convert_voc_to_yolo(annotation_path, label_path, class_mapping)
+if __name__ == "__main__":
+    main()
